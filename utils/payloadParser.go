@@ -1,6 +1,9 @@
 package utils
 
-import "github.com/gorilla/websocket"
+import (
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+)
 
 // User Details
 type User struct {
@@ -12,12 +15,12 @@ type User struct {
 
 // ClientsMeta details
 type ClientsMeta struct {
-	ChannelKey  int     `json:"channelKey"`
-	ChannelType int     `json:"channelType"` // 0 -> one to one chat  // 1 -> one to many chat
-	Sender      User    `json:"sender"`
-	Reciever    User    `json:"reciever"`
-	CreateDate  string  `json:"createDate"`
-	Data        Message `json:"message"`
+	ChannelKey  uuid.UUID `json:"channelKey"`
+	ChannelType int       `json:"channelType"` // 0 -> one to one chat  // 1 -> one to many chat
+	Sender      User      `json:"sender"`
+	Reciever    User      `json:"reciever"`
+	CreateDate  string    `json:"createDate"`
+	Data        Message   `json:"message"`
 }
 
 // Message Details

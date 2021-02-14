@@ -8,9 +8,8 @@ import (
 	"net/http"
 	"os"
 
-	"chat/pkg/utils"
+	"chat/utils"
 
-	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
@@ -32,37 +31,53 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func storeInRedis(msg utils.Message) {
-	json, err := json.Marshal(msg)
-	if err != nil {
-		panic(err)
-	}
-
-	if err := rdb.RPush(ctx, "chat_messages", json).Err(); err != nil {
-		panic(err)
-	}
-}
-
 // If a message is sent while a client is closing, ignore the error
 func unsafeError(err error) bool {
 	return !websocket.IsCloseError(err, websocket.CloseGoingAway) && err != io.EOF
 }
 
-// func messageClient(client *websocket.Conn, msg utils.Message) {
-// 	err := client.WriteJSON(msg)
-// 	if err != nil && unsafeError(err) {
-// 		log.Printf("error: %v", err)
-// 		client.Close()
-// 		delete(clients, client)
-// 	}
-// }
+func messageClient(client *websocket.Conn, msg utils.ClientsMeta, reciever string) {
 
-// func messageClients(msg utils.Message) {
-// 	// send to every client currently connected
-// 	for client := range clients {
-// 		messageClient(client, msg)
-// 	}
-// }
+	err := client.WriteJSON(msg)
+
+	if err != nil && unsafeError(err) {
+		log.Printf("error: %v", err)
+		client.Close()
+		delete(clients, reciever)
+	}
+}
+
+func getRecieverID(msg utils.ClientsMeta) string {
+	recieverID := msg.Reciever.UserID
+	recieverOut, err := json.Marshal(recieverID)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return string(recieverOut)
+}
+
+func messageClients(msg utils.ClientsMeta) {
+	// send to every client currently connected
+	// for client := range clients {
+	// 	messageClient(client, msg)
+	// }
+
+	// messageObject, _ := json.Marshal(msg)
+	// log.Printf("jsonInfo: %s\n", messageObject)
+
+	receiverID := getRecieverID(msg)
+
+	clientSocket, found := clients[receiverID]
+
+	if found {
+		messageClient(clientSocket.WebSocketConn, msg, receiverID)
+	} else {
+		log.Println(found)
+	}
+
+}
 
 // func sendPreviousMessages(ws *websocket.Conn) {
 // 	chatMessages, err := rdb.LRange(ctx, "chat_messages", 0, -1).Result()
@@ -88,7 +103,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//ensure connection close when function returns
-	// defer ws.Close()
+	defer ws.Close()
 
 	// Register or store new clients ------- step-1
 	clients[q] = &utils.Client{WebSocketConn: ws}
@@ -106,37 +121,29 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		//Read in a new message as JSON and map it to a Message object
 		err := ws.ReadJSON(&msg)
+
 		if err != nil {
-			// delete(clients, ws)
+			receiverID := getRecieverID(msg)
+			delete(clients, receiverID)
 			break
 		}
 
-		jsonInfo, _ := json.Marshal(msg)
-		log.Printf("jsonInfo: %s\n", jsonInfo)
-
 		// send new message  to the channel : after this handleMessage() core go routine perform rest task
-		// broadcaster <- msg
+		broadcaster <- msg
 	}
 
 }
 
-// func handleMessages() {
-// 	for {
-// 		// grab any next message from channel
-// 		msg := <-broadcaster
+func handleMessages() {
+	for {
+		// grab any next message from channel
+		msg := <-broadcaster
 
-// 		// store message to redis & then send to client
-// 		storeInRedis(msg)
-// 		messageClients(msg)
-// 	}
-
-// }
-
-func WebSocketHandler() gin.HandlerFunc {
-	fn := func(c *gin.Context) {
-		handleConnections(c.Writer, c.Request)
+		// store message to redis & then send to client
+		// storeInRedis(msg)
+		messageClients(msg)
 	}
-	return gin.HandlerFunc(fn)
+
 }
 
 func main() {
@@ -162,7 +169,7 @@ func main() {
 	// Routings
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 	http.HandleFunc("/websocket", handleConnections)
-	// go handleMessages()
+	go handleMessages()
 
 	// Exec Server
 	log.Print("Server starting at localhost:3000")

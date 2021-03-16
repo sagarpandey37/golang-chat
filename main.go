@@ -59,13 +59,6 @@ func getRecieverID(msg utils.ClientsMeta) string {
 }
 
 func messageClients(msg utils.ClientsMeta) {
-	// send to every client currently connected
-	// for client := range clients {
-	// 	messageClient(client, msg)
-	// }
-
-	// messageObject, _ := json.Marshal(msg)
-	// log.Printf("jsonInfo: %s\n", messageObject)
 
 	receiverID := getRecieverID(msg)
 
@@ -79,23 +72,21 @@ func messageClients(msg utils.ClientsMeta) {
 
 }
 
-// func sendPreviousMessages(ws *websocket.Conn) {
-// 	chatMessages, err := rdb.LRange(ctx, "chat_messages", 0, -1).Result()
-// 	if err != nil {
-// 		panic(err)
-// 	}
+func sendPreviousMessages(recieverSocket *websocket.Conn, recieverID string, channelKey string) {
 
-// 	// send previous messages
-// 	for _, chatMessage := range chatMessages {
-// 		var msg utils.Message
-// 		json.Unmarshal([]byte(chatMessage), &msg)
-// 		messageClient(ws, msg)
-// 	}
-// }
+	chatMessages := utils.FetchMessages(rdb, channelKey)
+
+	for _, chatMessage := range chatMessages {
+		var msg utils.ClientsMeta
+		json.Unmarshal([]byte(chatMessage), &msg)
+		messageClient(recieverSocket, msg, recieverID)
+	}
+}
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 
-	q := r.URL.Query()["userID"][0]
+	userID := r.URL.Query()["userID"][0]
+	channelkey := r.URL.Query()["channelkey"][0]
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -106,14 +97,21 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	defer ws.Close()
 
 	// Register or store new clients ------- step-1
-	clients[q] = &utils.Client{WebSocketConn: ws}
+	clients[userID] = &utils.Client{WebSocketConn: ws}
 
 	log.Println(clients)
 
 	// // if it's zero, no messages were ever sent/saved ------- step-2 ( send previous chat message but check any any message exist or not in redis)
-	// if rdb.Get(ctx, "chat_messages").Val() == "" {
-	// 	sendPreviousMessages(ws)
-	// }
+	if rdb.Get(ctx, channelkey).Val() == "" {
+
+		recieverSocket, found := clients[userID]
+
+		if found {
+			sendPreviousMessages(recieverSocket.WebSocketConn, userID, channelkey)
+		} else {
+			log.Println(found)
+		}
+	}
 
 	//Read Message from other clients and brodcast it
 	for {
@@ -128,19 +126,19 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// send new message  to the channel : after this handleMessage() core go routine perform rest task
+		// send new message  to the channel : after this handleMessage() core go routine perform rest of the task
 		broadcaster <- msg
 	}
 
 }
 
-func handleMessages() {
+func handleMessages(rdb *redis.Client) {
 	for {
 		// grab any next message from channel
 		msg := <-broadcaster
 
 		// store message to redis & then send to client
-		// storeInRedis(msg)
+		utils.StoreMessages(msg, rdb)
 		messageClients(msg)
 	}
 
@@ -169,7 +167,7 @@ func main() {
 	// Routings
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 	http.HandleFunc("/websocket", handleConnections)
-	go handleMessages()
+	go handleMessages(rdb)
 
 	// Exec Server
 	log.Print("Server starting at localhost:3000")

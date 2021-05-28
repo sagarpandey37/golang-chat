@@ -23,7 +23,7 @@ type ClientsMeta struct {
 	Data        Message   `json:"message"`
 }
 
-// Message Details
+// Message Details (In future add media option like files, images(1 or many), videos )
 type Message struct {
 	Text       string `json:"text,omitempty"`
 	Author     User   `json:"author"`

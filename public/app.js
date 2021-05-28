@@ -12,10 +12,6 @@ $(function () {
         let username = $("#input-username")[0].value;
         let text = $("#input-text")[0].value;
         websocket.send(
-            // {
-            // JSON.stringify(    username: username,
-            //     text: text,
-            // })
             JSON.stringify({
                 "channelKey":1,
                 "ChannelType":0,

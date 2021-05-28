@@ -101,7 +101,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	log.Println(clients)
 
-	// // if it's zero, no messages were ever sent/saved ------- step-2 ( send previous chat message but check any any message exist or not in redis)
+	// // if it's zero, no messages were ever sent/saved ------- step-2 ( send previous chat message but check any message exist or not in redis)
 	if rdb.Get(ctx, channelkey).Val() == "" {
 
 		recieverSocket, found := clients[userID]
